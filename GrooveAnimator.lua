@@ -36,8 +36,8 @@
 		GrooveAnimator:RegisterEasingStyle(style: string, easing_map: {[Enum.EasingDirection]: (alpha: number)->(number)})
 			Registers a new easing style with the given easing map.
 	-------------------------------------------------------------------------------------------------------
-    Example Usage:
-    	-- Source rig
+	Example Usage:
+		-- Source rig
 		local rig = script.Parent.Rig
 
 		local groove_track = GrooveAnimator.newTrack(GrooveAnimator:ImportKeyframeSequence(rig.AnimSaves["Bounce"]))
