@@ -201,9 +201,8 @@ local function getPlayingTracks(self: GrooveController) : ({GrooveTrack}, number
 end
 
 local function step(self: GrooveController, delta_time: number, output_transforms: {[string]: CFrame})
-
 	local playing_tracks, total_weight = getPlayingTracks(self)
-
+	
 	for i=1, #playing_tracks do
 		local track = playing_tracks[i]
 
@@ -228,7 +227,7 @@ local function step(self: GrooveController, delta_time: number, output_transform
 			end
 		end
 
-		-- Find the keyframes to the left and right of the current time.
+		-- Find the keyframes to the left and right of the current time. TODO see if we can do some clever tricks to cache these as much as possible
 		local left, right, left_index, right_index = findBoundingKeyframes(track.Sequence, track.TimePosition)
 		if not left and right then
 			left = right
@@ -269,11 +268,15 @@ local function step(self: GrooveController, delta_time: number, output_transform
 			output_transforms[name] = (output_transforms[name] or CFrame.identity):Lerp(newCFrame, track_weight_alpha)
 		end
 
-		track.Stepped:Fire(delta_time)
+		if ( track.Stepped._handlerListHead ) then
+			track.Stepped:Fire(delta_time)
+		end
 	end
 
-	self.Stepped:Fire(delta_time, output_transforms)
-
+	if ( self.Stepped._handlerListHead ) then
+		self.Stepped:Fire(delta_time, output_transforms)
+	end
+	
 	return output_transforms
 end
 
