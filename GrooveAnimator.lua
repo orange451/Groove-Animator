@@ -33,8 +33,8 @@
 			Converts a roblox KeyframeSequence object in to a GrooveKeyframeSequence.
 		GrooveAnimator:ImportSerialized(buf: buffer) : GrooveKeyframeSequence
 			Deserializes a GrooveKeyframeSequence stored as a buffer.
-		GrooveAnimator:RegisterEasingStyle(style: string, callback: (alpha: number, direction: Enum.EasingDirection) -> number)
-			Registers a new easing style with the given function.
+		GrooveAnimator:RegisterEasingStyle(style: string, easing_map: {[Enum.EasingDirection]: (alpha: number)->(number)})
+			Registers a new easing style with the given easing map.
 	-------------------------------------------------------------------------------------------------------
     Example Usage:
     	-- Source rig
