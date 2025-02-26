@@ -22,7 +22,7 @@
 	Author: Andrew Hamilton (orange451)
 	-------------------------------------------------------------------------------------------------------
 	Changelog:
-		1.0.0 - February 19th, 2025 - Initial Release
+		1.0.0 - February 25th, 2025 - Initial Release
 	-------------------------------------------------------------------------------------------------------
 	API:
 		GrooveAnimator.newController() - function
