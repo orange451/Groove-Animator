@@ -22,26 +22,26 @@
 
 ## API
 
-``` `GrooveAnimator.newController()`
+`GrooveAnimator.newController()`
 Creates an animation controller similar to Roblox’s `AnimationController`.
 - **Returns**: `GrooveController`
 
-``` `GrooveAnimator.newTrack(sequence: GrooveKeyframeSequence)`
+`GrooveAnimator.newTrack(sequence: GrooveKeyframeSequence)`
 Creates a track backed by a `GrooveKeyframeSequence`.
 - **Parameters**: `sequence` - A `GrooveKeyframeSequence` object.
 - **Returns**: `GrooveTrack`
 
-``` `GrooveAnimator:ImportKeyframeSequence(sequence: KeyframeSequence)`
+`GrooveAnimator:ImportKeyframeSequence(sequence: KeyframeSequence)`
 Converts a Roblox `KeyframeSequence` into a `GrooveKeyframeSequence`.
 - **Parameters**: `sequence` - A Roblox `KeyframeSequence`.
 - **Returns**: `GrooveKeyframeSequence`
 
-``` `GrooveAnimator:ImportSerialized(buf: buffer)`
+`GrooveAnimator:ImportSerialized(buf: buffer)`
 Deserializes a `GrooveKeyframeSequence` from a binary buffer.
 - **Parameters**: `buf` - A buffer containing serialized data.
 - **Returns**: `GrooveKeyframeSequence`
 
-``` `GrooveAnimator:RegisterEasingStyle(style: string, callback: (alpha: number, direction: Enum.EasingDirection) -> number)`
+`GrooveAnimator:RegisterEasingStyle(style: string, callback: (alpha: number, direction: Enum.EasingDirection) -> number)`
 Registers a custom easing style with a callback function.
 - **Parameters**:
   - `style` - Name of the easing style (e.g., "CustomEase").
