@@ -23,7 +23,7 @@
 --                                                                            --
 -- Authors:                                                                   --
 --   stravant - July 31st, 2021 - Created the file.                           --
--- 	 CompilerError - October 15th, 2024 - Added Luau typing support						-- 			
+--   CompilerError - October 15th, 2024 - Added Luau typing support       --
 --------------------------------------------------------------------------------
 
 -- The currently idle thread to run the next handler on
