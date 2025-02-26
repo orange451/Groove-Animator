@@ -45,7 +45,8 @@ Deserializes a `GrooveKeyframeSequence` from a binary buffer.
 Registers a custom easing style with a callback function.
 - **Parameters**:
   - `style` - Name of the easing style (e.g., "CustomEase").
-  - `easing_map` - k,v map where each key is a `Enum.EasingDirection` and each value is a callback function `(alpha: number)->(number)`
+  - `easing_map` - k,v map where each key is a `Enum.EasingDirection` and each
+    value is a callback function `(alpha: number)->(number)`
 
 ## Example Usage
 Here’s how to animate a rig with `GrooveAnimator`:
