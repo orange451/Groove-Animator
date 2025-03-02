@@ -85,6 +85,7 @@ export type GrooveKeyframe = {
 export type GrooveKeyframeSequence = {
 	Keyframes: {GrooveKeyframe},
 	Loop: boolean,
+	Name: string,
 
 	Serialize: (self: GrooveKeyframeSequence) -> (buffer),
 }
@@ -101,8 +102,10 @@ export type GrooveTrack = {
 	Length: number,
 	TimePosition: number,
 	Speed: number,
-	
+
 	KeyframeIndex: number,
+
+	Name: string,
 
 	KeyframeReached: Signal.Signal<(keyframeName: string, keyframeIndex: number) -> (), string, number>,
 	Stepped: Signal.Signal<(dt: number) -> (), number>,
@@ -169,7 +172,7 @@ local function findBoundingKeyframes(keyframe_sequence: GrooveKeyframeSequence, 
 	local rightKeyframe = nil
 
 	while low <= high do
-		local mid = math.floor((low + high) / 2)
+		local mid = (low + high) // 2
 		local midTime = sortedKeyframes[mid].Time
 
 		if midTime < targetTime then
@@ -202,7 +205,7 @@ end
 
 local function step(self: GrooveController, delta_time: number, output_transforms: {[string]: CFrame})
 	local playing_tracks, total_weight = getPlayingTracks(self)
-	
+
 	for i=1, #playing_tracks do
 		local track = playing_tracks[i]
 
@@ -217,7 +220,7 @@ local function step(self: GrooveController, delta_time: number, output_transform
 		if track.TimePosition > track.Length then
 			if track.Looped then
 				track.TimePosition -= track.Length
-				
+
 				-- Play changed keyframe for last keyframe (We skip it visually)
 				local _, last_keyframe, _, last_index = findBoundingKeyframes(track.Sequence, track.Length)
 				track.KeyframeReached:Fire(last_keyframe.Name, last_index)
@@ -234,7 +237,7 @@ local function step(self: GrooveController, delta_time: number, output_transform
 		elseif left and not right then
 			right = left
 		end
-		
+
 		-- Figure out keyframe changed.
 		local use_index = is_last_frame and right_index or left_index
 		local use_keyframe = is_last_frame and right or left
@@ -276,7 +279,7 @@ local function step(self: GrooveController, delta_time: number, output_transform
 	if ( self.Stepped._handlerListHead ) then
 		self.Stepped:Fire(delta_time, output_transforms)
 	end
-	
+
 	return output_transforms
 end
 
@@ -499,11 +502,13 @@ function module.newTrack(keyframe_sequence: GrooveKeyframeSequence) : GrooveTrac
 
 		WeightTarget = 1,
 		WeightCurrent = 1,
-		
+
 		KeyframeIndex = 0,
 
 		IsPlaying = false,
 		Speed = 1,
+
+		Name = keyframe_sequence.Name,
 
 		KeyframeReached = Signal.new(),
 		Stepped = Signal.new(),
@@ -570,6 +575,9 @@ local function serializeKeyframe(self: GrooveKeyframeSequence)
 
 	-- Write Loop as uint8 (1 byte)
 	table.insert(parts, string.pack("B", self.Loop and 1 or 0))
+
+	-- Write Name: length (uint32) + string data
+	table.insert(parts, string.pack("I4", #self.Name) .. self.Name)
 
 	-- Write number of Keyframes as uint32 (4 bytes)
 	table.insert(parts, string.pack("I4", #self.Keyframes))
@@ -649,6 +657,7 @@ local function newKeyframeSequence()
 	local sequence: GrooveKeyframeSequence = {
 		Keyframes = {},
 		Loop = false,
+		Name = "KeyframeSequence",
 
 		Serialize = serializeKeyframe,
 	}
@@ -664,6 +673,12 @@ function module:ImportSerialized(buf: buffer) : GrooveKeyframeSequence
 	local loopByte = buffer.readu8(buf, offset)
 	data.Loop = loopByte == 1
 	offset = offset + 1
+
+	-- Read Name string (length-prefixed)
+	local nameLen = buffer.readu32(buf, offset)
+	offset = offset + 4
+	data.Name = buffer.readstring(buf, offset, nameLen)
+	offset = offset + nameLen
 
 	-- Read number of Keyframes (uint32)
 	local numKeyframes = buffer.readu32(buf, offset)
@@ -734,7 +749,7 @@ function module:ImportSerialized(buf: buffer) : GrooveKeyframeSequence
 			local easingDirValue = buffer.readu32(buf, offset)
 			offset = offset + 4
 			entry.EasingDirection = Enum.EasingDirection:FromValue(easingDirValue) :: Enum.EasingDirection
-			
+
 			-- Read EasingStyle string (length-prefixed)
 			local easingStyleNameLen = buffer.readu32(buf, offset)
 			offset = offset + 4
@@ -784,6 +799,7 @@ end
 function module:ImportKeyframeSequence(keyframe_sequence: KeyframeSequence) : GrooveKeyframeSequence
 	local sequence = newKeyframeSequence()
 	sequence.Loop = keyframe_sequence.Loop
+	sequence.Name = keyframe_sequence.Name
 
 	-- Create keyframes
 	for _,v in pairs(keyframe_sequence:GetKeyframes()) do
