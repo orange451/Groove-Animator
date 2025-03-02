@@ -412,8 +412,12 @@ function module.newTrack(keyframe_sequence: GrooveKeyframeSequence) : GrooveTrac
 		local new_index = speed_index + 1
 		speed_index = new_index
 
+		local function isInterrupted()
+			return speed_index ~= new_index
+		end
+
 		local function update(initial_speed, target_speed, x)
-			if ( speed_index ~= new_index ) then
+			if ( isInterrupted() ) then
 				return
 			end
 
@@ -424,27 +428,29 @@ function module.newTrack(keyframe_sequence: GrooveKeyframeSequence) : GrooveTrac
 			end
 		end
 
+		local function finish()
+			if ( callback and self.Speed == target_speed and not isInterrupted() ) then
+				callback()
+			end
+		end
+
 		if ( duration <= 0 ) then
 			update(0, target_speed, 1)
 
-			if ( callback and self.Speed == target_speed ) then
-				callback()
-			end
+			finish()
 		else
 			task.spawn(function()
 				local i_transition_time = 1/duration
 				local initial_speed = self.Speed
 				local x = 0
 
-				while(x < 1 and speed_index == new_index) do
+				while(x < 1 and not isInterrupted()) do
 					local delta = task.wait() * i_transition_time
 					x = math.clamp(x + delta, 0, 1)
 					update(initial_speed, target_speed, x)
 				end
 
-				if ( callback and self.Speed == target_speed ) then
-					callback()
-				end
+				finish()
 			end)
 		end
 	end
@@ -455,8 +461,12 @@ function module.newTrack(keyframe_sequence: GrooveKeyframeSequence) : GrooveTrac
 		local new_index = weight_index + 1
 		weight_index = new_index
 
+		local function isInterrupted()
+			return weight_index ~= new_index
+		end
+
 		local function update(initial_weight, target_weight, x)
-			if ( weight_index ~= new_index ) then
+			if ( isInterrupted() ) then
 				return
 			end
 
@@ -468,7 +478,7 @@ function module.newTrack(keyframe_sequence: GrooveKeyframeSequence) : GrooveTrac
 		end
 
 		local function finish()
-			if ( callback and self.WeightTarget == weight ) then
+			if ( callback and self.WeightTarget == weight and not isInterrupted() ) then
 				callback()
 			end
 		end
@@ -483,7 +493,7 @@ function module.newTrack(keyframe_sequence: GrooveKeyframeSequence) : GrooveTrac
 				local initial_weight = self.WeightCurrent
 				local x = 0
 
-				while(x < 1 and weight_index == new_index) do
+				while(x < 1 and not isInterrupted()) do
 					local delta = task.wait() * i_transition_time
 					x = math.clamp(x + delta, 0, 1)
 					update(initial_weight, weight, x)
