@@ -23,6 +23,7 @@
 	-------------------------------------------------------------------------------------------------------
 	Changelog:
 		1.0.0 - February 25th, 2025 - Initial Release
+		1.0.1 - March 2nd, 2025 - Fixed Play() and Stop() functions from breaking tracks
 	-------------------------------------------------------------------------------------------------------
 	API:
 		GrooveAnimator.newController() - function
