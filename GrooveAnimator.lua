@@ -18,7 +18,7 @@
 		
 		KeyframeSequences can be written to a binary format for convenient storage and fast loading.
 	-------------------------------------------------------------------------------------------------------
-	Version: 1.0.0
+	Version: 1.0.1
 	Author: Andrew Hamilton (orange451)
 	-------------------------------------------------------------------------------------------------------
 	Changelog:
