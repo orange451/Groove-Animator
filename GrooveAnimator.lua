@@ -18,12 +18,13 @@
 		
 		KeyframeSequences can be written to a binary format for convenient storage and fast loading.
 	-------------------------------------------------------------------------------------------------------
-	Version: 1.0.1
+	Version: 1.0.2
 	Author: Andrew Hamilton (orange451)
 	-------------------------------------------------------------------------------------------------------
 	Changelog:
 		1.0.0 - February 25th, 2025 - Initial Release
 		1.0.1 - March 2nd, 2025 - Fixed Play() and Stop() functions from breaking tracks
+		1.0.2 - March 6th, 2025 - Added EscapeBuffer/DecodeBuffer functions
 	-------------------------------------------------------------------------------------------------------
 	API:
 		GrooveAnimator.newController() - function
@@ -36,6 +37,10 @@
 			Deserializes a GrooveKeyframeSequence stored as a buffer.
 		GrooveAnimator:RegisterEasingStyle(style: string, easing_map: {[Enum.EasingDirection]: (alpha: number)->(number)})
 			Registers a new easing style with the given easing map.
+		GrooveAnimator:EscapeBuffer(input_buffer: buffer) : string
+			Converts a buffer in to a hex readible string
+		GrooveAnimator:DecodeBuffer(input_string: string) : buffer
+			Converts a hex redible string in to a buffer
 	-------------------------------------------------------------------------------------------------------
 	Example Usage:
 		-- Source rig
@@ -835,6 +840,45 @@ function module:ImportKeyframeSequence(keyframe_sequence: KeyframeSequence) : Gr
 	end)
 
 	return sequence
+end
+
+-- Escapes a buffer to a string with \xFF format (2 hex digits)
+--[[ If you want to store this to a module you can do:
+	```lua
+	print(`return "{groove:EscapeBuffer(sequence:Serialize())}"`)
+	```
+]]
+function module:EscapeBuffer(input_buffer: buffer)
+	local length = buffer.len(input_buffer)
+	local result = {}
+
+	-- Read each byte and convert to escaped hex format
+	for i = 0, length - 1 do
+		local byte = buffer.readu8(input_buffer, i)
+		table.insert(result, string.format("\\\\x%02X", byte))
+	end
+
+	-- Join all escaped sequences into one string
+	return table.concat(result)
+end
+
+-- Reads an escaped hex string and converts it back in to a buffer
+function module:DecodeBuffer(input_string: string)
+	local sequence_len = 4
+	-- Create a new buffer with size based on number of \xNN sequences
+	local byteCount = #input_string / sequence_len -- Each \xNN is 4 chars representing 1 byte
+	local newBuffer = buffer.create(byteCount)
+
+	-- Parse each \xNN sequence and write the byte
+	for i = 1, #input_string, sequence_len do
+		local hex = input_string:sub(i + 1, i + 2) -- Get the "FF" part
+		local byte = tonumber(hex, 16) -- Convert hex to number
+		print(hex, byte)
+		
+		buffer.writeu8(newBuffer, (i - 1) / sequence_len, byte :: number) -- Write byte at position
+	end
+
+	return newBuffer
 end
 
 function module:RegisterEasingStyle(easing_style: string, easing_map: {[Enum.EasingDirection]: (alpha: number)->(number)})
