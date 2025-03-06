@@ -871,10 +871,8 @@ function module:DecodeBuffer(input_string: string)
 
 	-- Parse each \xNN sequence and write the byte
 	for i = 1, #input_string, sequence_len do
-		local hex = input_string:sub(i + 1, i + 2) -- Get the "FF" part
+		local hex = input_string:sub(i + 2, i + 3) -- Get the "FF" part
 		local byte = tonumber(hex, 16) -- Convert hex to number
-		print(hex, byte)
-		
 		buffer.writeu8(newBuffer, (i - 1) / sequence_len, byte :: number) -- Write byte at position
 	end
 
