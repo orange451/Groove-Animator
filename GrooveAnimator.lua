@@ -24,7 +24,7 @@
 	Changelog:
 		1.0.0 - February 25th, 2025 - Initial Release
 		1.0.1 - March 2nd, 2025 - Fixed Play() and Stop() functions from breaking tracks
-		1.0.2 - March 6th, 2025 - Added EscapeBuffer/DecodeBuffer functions
+		1.0.2 - March 6th, 2025 - Added EncodeBuffer/DecodeBuffer functions
 	-------------------------------------------------------------------------------------------------------
 	API:
 		GrooveAnimator.newController() - function
@@ -37,7 +37,7 @@
 			Deserializes a GrooveKeyframeSequence stored as a buffer.
 		GrooveAnimator:RegisterEasingStyle(style: string, easing_map: {[Enum.EasingDirection]: (alpha: number)->(number)})
 			Registers a new easing style with the given easing map.
-		GrooveAnimator:EscapeBuffer(input_buffer: buffer) : string
+		GrooveAnimator:EncodeBuffer(input_buffer: buffer) : string
 			Converts a buffer in to a hex readible string
 		GrooveAnimator:DecodeBuffer(input_string: string) : buffer
 			Converts a hex redible string in to a buffer
@@ -845,10 +845,10 @@ end
 -- Escapes a buffer to a string with \xFF format (2 hex digits)
 --[[ If you want to store this to a module you can do:
 	```lua
-	print(`return "{groove:EscapeBuffer(sequence:Serialize())}"`)
+	print(`return "{groove:EncodeBuffer(sequence:Serialize())}"`)
 	```
 ]]
-function module:EscapeBuffer(input_buffer: buffer)
+function module:EncodeBuffer(input_buffer: buffer)
 	local length = buffer.len(input_buffer)
 	local result = {}
 
