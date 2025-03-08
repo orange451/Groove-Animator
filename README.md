@@ -1,6 +1,6 @@
 # GrooveAnimator - Custom Animation Handler for Roblox
 
-`GrooveAnimator` is a lightweight, virtual animation handler designed for Roblox, enabling smooth keyframe sequence animation playback without an instance overhead. It excels at compositing multiple animations or replacing Roblox’s default animator.
+`GrooveAnimator` is a lightweight, virtual animation handler designed for Roblox, enabling smooth keyframe sequence animation playback without an instance overhead. It can be used to composite multiple animations or replace Roblox’s default animator.
 
 ## Features
 - **Virtual Animations**: No instance overhead.
