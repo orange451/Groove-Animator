@@ -68,6 +68,8 @@ local Signal = require(script.Signal) -- Should support any signal library that 
 
 local TweenService = game:GetService("TweenService")
 
+local lerp = math.lerp
+
 type PosesInterface = {
 	Poses: {GroovePose},
 }
@@ -163,10 +165,6 @@ end
 -- Override Linear callback so we dont have to call a service!
 easingStyleMap[Enum.EasingStyle.Linear.Name] = function(alpha: number, easing_direction: Enum.EasingDirection)
 	return alpha
-end
-
-local function lerp(a: number, b: number, x: number)
-	return a + (b - a) * x
 end
 
 local function findBoundingKeyframes(keyframe_sequence: GrooveKeyframeSequence, targetTime: number) : (GrooveKeyframe, GrooveKeyframe, number, number)
