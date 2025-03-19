@@ -18,14 +18,15 @@
 		
 		KeyframeSequences can be written to a binary format for convenient storage and fast loading.
 	-------------------------------------------------------------------------------------------------------
-	Version: 1.0.3
+	Version: 1.0.4
 	Author: Andrew Hamilton (orange451)
 	-------------------------------------------------------------------------------------------------------
 	Changelog:
 		1.0.0 - February 25th, 2025 - Initial Release
 		1.0.1 - March 2nd, 2025 - Fixed Play() and Stop() functions from breaking tracks
 		1.0.2 - March 6th, 2025 - Added EncodeBuffer/DecodeBuffer functions
-		1.0.3 - March 19th, 2025 - Added GrooveRig.ComputeWorldPoseTransform and GrooveController.ComputeAncestorPoses 
+		1.0.3 - March 19th, 2025 - Added GrooveRig.ComputeWorldPoseTransform and GrooveController.ComputeAncestorPoses
+		1.0.4 - March 19th, 2025 - Added ComputePoseTransform. Added GrooveRig.Animatable
 	-------------------------------------------------------------------------------------------------------
 	API:
 		GrooveAnimator.newController() - function
@@ -147,6 +148,7 @@ export type GrooveController = {
 
 export type GrooveRig = {
 	Model: Model,
+	ComputePoseTransform: (self: GrooveRig, bone_name: string)->(CFrame),
 	ComputeWorldPoseTransform: (self: GrooveRig, bone_name: string)->(CFrame),
 	Animatable: boolean,
 	Destroy: (self: GrooveRig)->(),
@@ -374,14 +376,14 @@ local function newRig(self: GrooveController, rig: Model) : GrooveRig
 				self[k] = nil
 			end
 		end,
-		
-		ComputeWorldPoseTransform = function(self: GrooveRig, pose_name: string)
+
+		ComputePoseTransform = function(self: GrooveRig, pose_name: string)
 			local scale = rig:GetScale()
 			local poses = controller:ComputeAncestorPoses(pose_name)
-			
+
 			local function getTransform(bone_name: string)
 				local parent_transform = transform_scale(lastTransforms[bone_name] or CFrame.identity, scale)
-				
+
 				local motor = part_name_to_motor_map[bone_name] :: Motor6D
 				if ( not motor ) then
 					return CFrame.identity
@@ -398,8 +400,12 @@ local function newRig(self: GrooveController, rig: Model) : GrooveRig
 
 			transform = transform * getTransform(pose_name)
 
-			return rig:GetPivot() * transform
-		end
+			return transform
+		end,
+
+		ComputeWorldPoseTransform = function(self: GrooveRig, pose_name: string)
+			return rig:GetPivot() * self:ComputePoseTransform(pose_name)
+		end,
 	}
 	
 	table.insert(connections, controller.Stepped:Connect(function(dt: number, transforms: {[string]: CFrame})
