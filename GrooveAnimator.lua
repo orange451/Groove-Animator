@@ -18,13 +18,14 @@
 		
 		KeyframeSequences can be written to a binary format for convenient storage and fast loading.
 	-------------------------------------------------------------------------------------------------------
-	Version: 1.0.2
+	Version: 1.0.3
 	Author: Andrew Hamilton (orange451)
 	-------------------------------------------------------------------------------------------------------
 	Changelog:
 		1.0.0 - February 25th, 2025 - Initial Release
 		1.0.1 - March 2nd, 2025 - Fixed Play() and Stop() functions from breaking tracks
 		1.0.2 - March 6th, 2025 - Added EncodeBuffer/DecodeBuffer functions
+		1.0.3 - March 19th, 2025 - Added GrooveRig.ComputeWorldPoseTransform and GrooveController.ComputeAncestorPoses 
 	-------------------------------------------------------------------------------------------------------
 	API:
 		GrooveAnimator.newController() - function
@@ -71,13 +72,14 @@ local TweenService = game:GetService("TweenService")
 local lerp = math.lerp
 
 type PosesInterface = {
+	Name: string,
 	Poses: {GroovePose},
+	Parent: PosesInterface?
 }
 
 export type GrooveEasingFunction = (alpha: number, easing_direction: Enum.EasingDirection)->(number)
 
 export type GroovePose = {
-	Name: string,
 	CFrame: CFrame,
 	EasingDirection: Enum.EasingDirection,
 	EasingStyle: string,
@@ -85,7 +87,6 @@ export type GroovePose = {
 } & PosesInterface
 
 export type GrooveKeyframe = {
-	Name: string,
 	Time: number,
 	PoseMap: {[string]: GroovePose},
 } & PosesInterface
@@ -135,13 +136,18 @@ export type GrooveController = {
 	RemoveTrack: (self: GrooveController, track: GrooveTrack)->(),
 	Destroy: (self: GrooveController)->(),
 
+	CachedPoses: {[string]: GroovePose},
+
 	Stepped: Signal.Signal<(dt: number, transforms: {[string]: CFrame}) -> (), number, {[string]: CFrame}>,
 
-	GetPlayingAnimationTracks: (self: GrooveController)->({GrooveTrack})
+	GetPlayingAnimationTracks: (self: GrooveController)->({GrooveTrack}),
+
+	ComputeAncestorPoses: (self: GrooveController, bone_name: string)->({GroovePose}),
 }
 
 export type GrooveRig = {
 	Model: Model,
+	ComputeWorldPoseTransform: (self: GrooveRig, bone_name: string)->(CFrame),
 	Destroy: (self: GrooveRig)->(),
 }
 
@@ -272,7 +278,12 @@ local function step(self: GrooveController, delta_time: number, output_transform
 			local newCFrame = leftPose.CFrame:Lerp(rightPose.CFrame, lerp_ratio)
 
 			-- Store.
-			output_transforms[name] = (output_transforms[name] or CFrame.identity):Lerp(newCFrame, track_weight_alpha)
+			local old_value = output_transforms[name]
+			output_transforms[name] = (old_value or CFrame.identity):Lerp(newCFrame, track_weight_alpha)
+
+			if ( not old_value ) then
+				self.CachedPoses[name] = leftPose
+			end
 		end
 
 		if ( track.Stepped._handlerListHead ) then
@@ -287,9 +298,30 @@ local function step(self: GrooveController, delta_time: number, output_transform
 	return output_transforms
 end
 
+local function computeAncestorPoses(self: GrooveController, pose_name: string) : {GroovePose}
+	local poses: {GroovePose} = {}
+
+	local node: PosesInterface = self.CachedPoses[pose_name]
+	while(node) do
+		local parent_node = node.Parent
+		if ( not parent_node or parent_node.Name == "Keyframe" ) then
+			break
+		end
+
+		table.insert(poses, parent_node :: GroovePose)
+		node = parent_node
+	end
+
+	return poses
+end
+
 -- This is just a utility class
 -- It is suggested that you make your own solution to apply the transforms to your rig
 local function newRig(self: GrooveController, rig: Model) : GrooveRig
+	local controller = self
+	
+	local lastTransforms: {[string]: CFrame} = {}
+	
 	-- Cache the motors for quick animation transforms
 	local part_name_to_motor_map: {[string]: (Motor6D|Bone)} = {}
 	do
@@ -320,10 +352,16 @@ local function newRig(self: GrooveController, rig: Model) : GrooveRig
 	end
 
 	local connections: {Signal.Connection} = {}
+	
+	local function transform_scale(transform: CFrame, scale: number)
+		return CFrame.fromMatrix(transform.Position * scale, transform.XVector, transform.YVector, transform.ZVector)
+	end
 
-	table.insert(connections, self.Stepped:Connect(function(dt: number, transforms: {[string]: CFrame})
+	table.insert(connections, controller.Stepped:Connect(function(dt: number, transforms: {[string]: CFrame})
 		local scale = rig:GetScale()
-
+		
+		lastTransforms = transforms
+		
 		for partName, transform in pairs(transforms) do
 			local motor = part_name_to_motor_map[partName] :: Motor6D -- (Force it to be a motor so the intellisense stops being annoying)
 			if ( not motor ) then
@@ -333,7 +371,7 @@ local function newRig(self: GrooveController, rig: Model) : GrooveRig
 			if ( scale == 1 ) then
 				motor.Transform = transform
 			else
-				motor.Transform = CFrame.fromMatrix(transform.Position * scale, transform.XVector, transform.YVector, transform.ZVector)
+				motor.Transform = transform_scale(transform, scale)
 
 				-- Same logic as above:
 				--motor.Transform = CFrame.new(transform.Position * scale) * transform.Rotation
@@ -354,6 +392,32 @@ local function newRig(self: GrooveController, rig: Model) : GrooveRig
 				self[k] = nil
 			end
 		end,
+		
+		ComputeWorldPoseTransform = function(self: GrooveRig, pose_name: string)
+			local scale = rig:GetScale()
+			local poses = controller:ComputeAncestorPoses(pose_name)
+			
+			local function getTransform(bone_name: string)
+				local parent_transform = transform_scale(lastTransforms[bone_name] or CFrame.identity, scale)
+				
+				local motor = part_name_to_motor_map[bone_name] :: Motor6D
+				if ( not motor ) then
+					return CFrame.identity
+				end
+
+				local motor_transform = motor.C0
+				return motor_transform * parent_transform
+			end
+
+			local transform = CFrame.identity
+			for _,v in poses do
+				transform = getTransform(v.Name) * transform
+			end
+
+			transform = transform * getTransform(pose_name)
+
+			return rig:GetPivot() * transform
+		end
 	}
 
 	return groove_rig	
@@ -363,6 +427,7 @@ end
 function module.newController() : GrooveController
 	local controller: GrooveController = {
 		Tracks = {},
+		CachedPoses = {},
 		Stepped = Signal.new(),
 
 		GetPlayingAnimationTracks = function(self: GrooveController)
@@ -396,6 +461,8 @@ function module.newController() : GrooveController
 				self[k] = nil
 			end
 		end,
+
+		ComputeAncestorPoses = computeAncestorPoses,
 
 		AttachRig = newRig,
 	}
@@ -615,6 +682,9 @@ local function serializeKeyframe(self: GrooveKeyframeSequence)
 			entry = entry .. string.pack("I4", #key) .. key
 			-- Name: length (uint32) + string data
 			entry = entry .. string.pack("I4", #value.Name) .. value.Name
+			-- Parent Name: length (uint32) + string data
+			local parentPoseName = value.Parent and value.Parent.Name or ""
+			entry = entry .. string.pack("I4", #parentPoseName) .. parentPoseName
 			-- CFrame: 12 doubles from GetComponents()
 			entry = entry .. string.pack("dddddddddddd", value.CFrame:GetComponents())
 			-- EasingDirection: enum value as uint32
@@ -649,6 +719,7 @@ local function newPose()
 		CFrame = CFrame.identity,
 		EasingDirection = Enum.EasingDirection.Out,
 		EasingStyle = Enum.EasingStyle.Linear.Name,
+		Parent = nil,
 		Weight = 1,
 		Poses = {}
 	}
@@ -716,6 +787,8 @@ function module:ImportSerialized(buf: buffer) : GrooveKeyframeSequence
 		local numEntries = buffer.readu32(buf, offset)
 		offset = offset + 4
 
+		local parentMap: {[string]: string} = {}
+
 		-- Process each PoseMap entry
 		for j = 1, numEntries do
 			-- Read Key string (length-prefixed)
@@ -725,12 +798,24 @@ function module:ImportSerialized(buf: buffer) : GrooveKeyframeSequence
 			offset = offset + keyLen
 
 			local entry = newPose()
+			entry.Parent = keyframe
 
 			-- Read Name string (length-prefixed)
 			local nameLen = buffer.readu32(buf, offset)
 			offset = offset + 4
 			entry.Name = buffer.readstring(buf, offset, nameLen)
 			offset = offset + nameLen
+
+			-- Read Parent Name (length-prefixed)
+			local parentNameLen = buffer.readu32(buf, offset)
+			offset = offset + 4
+			local parentName = buffer.readstring(buf, offset, parentNameLen)
+			offset = offset + parentNameLen
+
+			-- Store parent association
+			if ( string.len(parentName) > 0 ) then
+				parentMap[entry.Name] = parentName
+			end
 
 			-- Read CFrame (12 doubles)
 			local x = buffer.readf64(buf, offset)
@@ -779,6 +864,20 @@ function module:ImportSerialized(buf: buffer) : GrooveKeyframeSequence
 			table.insert(keyframe.Poses, entry)
 		end
 
+		for bone_name, parent_name in parentMap do
+			local child_bone = keyframe.PoseMap[bone_name]
+			if ( not child_bone ) then
+				continue
+			end
+
+			local parent_bone = keyframe.PoseMap[parent_name]
+			if ( not parent_bone ) then
+				continue
+			end
+
+			child_bone.Parent = parent_bone
+		end
+
 		-- Add the keyframe to the Keyframes array
 		table.insert(data.Keyframes, keyframe)
 	end
@@ -786,11 +885,12 @@ function module:ImportSerialized(buf: buffer) : GrooveKeyframeSequence
 	return data
 end
 
-local function populatePoseMap(rbx_pose: Pose, keyframe: GrooveKeyframe, parent_list: PosesInterface)
+local function populatePoseMap(rbx_pose: Pose, keyframe: GrooveKeyframe, parent_pose: PosesInterface)
 	local easingStyle = poseEasingStyleMap[rbx_pose.EasingStyle] or Enum.EasingStyle.Linear
 	local easingDirection = Enum.EasingDirection:FromValue(rbx_pose.EasingDirection.Value) :: Enum.EasingDirection
 
 	local pose = newPose()
+	pose.Parent = parent_pose
 
 	-- Copy roblox properties
 	pose.Name = rbx_pose.Name
@@ -801,11 +901,11 @@ local function populatePoseMap(rbx_pose: Pose, keyframe: GrooveKeyframe, parent_
 
 	-- Track
 	keyframe.PoseMap[pose.Name] = pose
-	table.insert(parent_list.Poses, pose)
+	table.insert(parent_pose.Poses, pose)
 
 	-- Check children
-	for _,v in pairs(rbx_pose:GetSubPoses()) do
-		populatePoseMap(v :: Pose, keyframe, pose)
+	for _,sub_pose in rbx_pose:GetSubPoses() do
+		populatePoseMap(sub_pose :: Pose, keyframe, pose)
 	end
 end
 
