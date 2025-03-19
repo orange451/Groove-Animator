@@ -148,6 +148,7 @@ export type GrooveController = {
 export type GrooveRig = {
 	Model: Model,
 	ComputeWorldPoseTransform: (self: GrooveRig, bone_name: string)->(CFrame),
+	Animatable: boolean,
 	Destroy: (self: GrooveRig)->(),
 }
 
@@ -357,30 +358,11 @@ local function newRig(self: GrooveController, rig: Model) : GrooveRig
 		return CFrame.fromMatrix(transform.Position * scale, transform.XVector, transform.YVector, transform.ZVector)
 	end
 
-	table.insert(connections, controller.Stepped:Connect(function(dt: number, transforms: {[string]: CFrame})
-		local scale = rig:GetScale()
-		
-		lastTransforms = transforms
-		
-		for partName, transform in pairs(transforms) do
-			local motor = part_name_to_motor_map[partName] :: Motor6D -- (Force it to be a motor so the intellisense stops being annoying)
-			if ( not motor ) then
-				continue
-			end
-
-			if ( scale == 1 ) then
-				motor.Transform = transform
-			else
-				motor.Transform = transform_scale(transform, scale)
-
-				-- Same logic as above:
-				--motor.Transform = CFrame.new(transform.Position * scale) * transform.Rotation
-			end
-		end
-	end))
-
 	local groove_rig: GrooveRig = {
 		Model = rig,
+		
+		Animatable = true,
+		
 		Destroy = function(self: GrooveRig)
 			for _,v in ipairs(connections) do
 				v:Disconnect()
@@ -419,6 +401,30 @@ local function newRig(self: GrooveController, rig: Model) : GrooveRig
 			return rig:GetPivot() * transform
 		end
 	}
+	
+	table.insert(connections, controller.Stepped:Connect(function(dt: number, transforms: {[string]: CFrame})
+		lastTransforms = transforms
+
+		if ( groove_rig.Animatable ) then
+			local scale = rig:GetScale()
+			
+			for partName, transform in pairs(transforms) do
+				local motor = part_name_to_motor_map[partName] :: Motor6D -- (Force it to be a motor so the intellisense stops being annoying)
+				if ( not motor ) then
+					continue
+				end
+
+				if ( scale == 1 ) then
+					motor.Transform = transform
+				else
+					motor.Transform = transform_scale(transform, scale)
+
+					-- Same logic as above:
+					--motor.Transform = CFrame.new(transform.Position * scale) * transform.Rotation
+				end
+			end
+		end
+	end))
 
 	return groove_rig	
 end
