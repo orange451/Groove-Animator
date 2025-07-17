@@ -18,7 +18,7 @@
 		
 		KeyframeSequences can be written to a binary format for convenient storage and fast loading.
 	-------------------------------------------------------------------------------------------------------
-	Version: 1.0.4
+	Version: 1.0.5
 	Author: Andrew Hamilton (orange451)
 	-------------------------------------------------------------------------------------------------------
 	Changelog:
@@ -27,6 +27,7 @@
 		1.0.2 - March 6th, 2025 - Added EncodeBuffer/DecodeBuffer functions
 		1.0.3 - March 19th, 2025 - Added GrooveRig.ComputeWorldPoseTransform and GrooveController.ComputeAncestorPoses
 		1.0.4 - March 19th, 2025 - Added ComputePoseTransform. Added GrooveRig.Animatable
+		1.0.5 - July 17th, 2025 - Fixed bug where Pose Weights were not factored in to final weight
 	-------------------------------------------------------------------------------------------------------
 	API:
 		GrooveAnimator.newController() - function
@@ -151,6 +152,7 @@ export type GrooveRig = {
 	ComputePoseTransform: (self: GrooveRig, bone_name: string)->(CFrame),
 	ComputeWorldPoseTransform: (self: GrooveRig, bone_name: string)->(CFrame),
 	Animatable: boolean,
+	TrackScale: boolean,
 	Destroy: (self: GrooveRig)->(),
 }
 
@@ -282,7 +284,8 @@ local function step(self: GrooveController, delta_time: number, output_transform
 
 			-- Store.
 			local old_value = output_transforms[name]
-			output_transforms[name] = (old_value or CFrame.identity):Lerp(newCFrame, track_weight_alpha)
+			local pose_weight = track_weight_alpha * lerp(leftPose.Weight, rightPose.Weight, t)
+			output_transforms[name] = (old_value or CFrame.identity):Lerp(newCFrame, pose_weight)
 
 			if ( not old_value ) then
 				self.CachedPoses[name] = leftPose
@@ -322,9 +325,11 @@ end
 -- It is suggested that you make your own solution to apply the transforms to your rig
 local function newRig(self: GrooveController, rig: Model) : GrooveRig
 	local controller = self
-	
+
+	local scale = rig:GetScale() or 1
+
 	local lastTransforms: {[string]: CFrame} = {}
-	
+
 	-- Cache the motors for quick animation transforms
 	local part_name_to_motor_map: {[string]: (Motor6D|Bone)} = {}
 	do
@@ -355,16 +360,48 @@ local function newRig(self: GrooveController, rig: Model) : GrooveRig
 	end
 
 	local connections: {Signal.Connection} = {}
-	
+
 	local function transform_scale(transform: CFrame, scale: number)
 		return CFrame.fromMatrix(transform.Position * scale, transform.XVector, transform.YVector, transform.ZVector)
 	end
 
+	local function computePoseTransform(self: GrooveRig, pose_name: string)
+		local scale = rig:GetScale()
+		local poses = controller:ComputeAncestorPoses(pose_name)
+
+		local function getTransform(bone_name: string)
+			local parent_transform = transform_scale(lastTransforms[bone_name] or CFrame.identity, scale)
+
+			local motor = part_name_to_motor_map[bone_name] :: Motor6D
+			if ( not motor ) then
+				return CFrame.identity
+			end
+
+			local motor_transform = motor.C0
+			return motor_transform * parent_transform
+		end
+
+		local transform = CFrame.identity
+		for _,v in poses do
+			transform = getTransform(v.Name) * transform
+		end
+
+		transform = transform * getTransform(pose_name)
+
+		return transform
+	end
+
+	local function computeWorldPoseTransform(self: GrooveRig, pose_name: string)
+		return rig:GetPivot() * computePoseTransform(self, pose_name)
+	end
+
 	local groove_rig: GrooveRig = {
 		Model = rig,
-		
+
 		Animatable = true,
-		
+
+		TrackScale = false,
+
 		Destroy = function(self: GrooveRig)
 			for _,v in ipairs(connections) do
 				v:Disconnect()
@@ -375,45 +412,23 @@ local function newRig(self: GrooveController, rig: Model) : GrooveRig
 			for k,_ in pairs(self) do
 				self[k] = nil
 			end
+
+			(self :: any)._destroyed = true
 		end,
 
-		ComputePoseTransform = function(self: GrooveRig, pose_name: string)
-			local scale = rig:GetScale()
-			local poses = controller:ComputeAncestorPoses(pose_name)
+		ComputePoseTransform = computePoseTransform,
 
-			local function getTransform(bone_name: string)
-				local parent_transform = transform_scale(lastTransforms[bone_name] or CFrame.identity, scale)
-
-				local motor = part_name_to_motor_map[bone_name] :: Motor6D
-				if ( not motor ) then
-					return CFrame.identity
-				end
-
-				local motor_transform = motor.C0
-				return motor_transform * parent_transform
-			end
-
-			local transform = CFrame.identity
-			for _,v in poses do
-				transform = getTransform(v.Name) * transform
-			end
-
-			transform = transform * getTransform(pose_name)
-
-			return transform
-		end,
-
-		ComputeWorldPoseTransform = function(self: GrooveRig, pose_name: string)
-			return rig:GetPivot() * self:ComputePoseTransform(pose_name)
-		end,
+		ComputeWorldPoseTransform = computeWorldPoseTransform,
 	}
-	
+
 	table.insert(connections, controller.Stepped:Connect(function(dt: number, transforms: {[string]: CFrame})
 		lastTransforms = transforms
 
 		if ( groove_rig.Animatable ) then
-			local scale = rig:GetScale()
-			
+			if ( self.TrackScale ) then
+				scale = rig:GetScale()				
+			end
+
 			for partName, transform in pairs(transforms) do
 				local motor = part_name_to_motor_map[partName] :: Motor6D -- (Force it to be a motor so the intellisense stops being annoying)
 				if ( not motor ) then
@@ -965,7 +980,7 @@ function module:EncodeBuffer(input_buffer: buffer)
 	-- Read each byte and convert to escaped hex format
 	for i = 0, length - 1 do
 		local byte = buffer.readu8(input_buffer, i)
-		table.insert(result, string.format("\\\\x%02X", byte))
+		table.insert(result, string.format("\\x%02X", byte))
 	end
 
 	-- Join all escaped sequences into one string
@@ -974,16 +989,14 @@ end
 
 -- Reads an escaped hex string and converts it back in to a buffer
 function module:DecodeBuffer(input_string: string)
-	local sequence_len = 4
 	-- Create a new buffer with size based on number of \xNN sequences
-	local byteCount = #input_string / sequence_len -- Each \xNN is 4 chars representing 1 byte
+	local byteCount = #input_string -- Each \xNN is 4 chars representing 1 byte
 	local newBuffer = buffer.create(byteCount)
 
 	-- Parse each \xNN sequence and write the byte
-	for i = 1, #input_string, sequence_len do
-		local hex = input_string:sub(i + 2, i + 3) -- Get the "FF" part
-		local byte = tonumber(hex, 16) -- Convert hex to number
-		buffer.writeu8(newBuffer, (i - 1) / sequence_len, byte :: number) -- Write byte at position
+	for i = 1, #input_string do
+		local byte = input_string:byte(i, i)
+		buffer.writeu8(newBuffer, (i - 1), byte) -- Write byte at position
 	end
 
 	return newBuffer
